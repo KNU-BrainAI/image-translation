@@ -1,3 +1,4 @@
+from transformers import MarianMTModel, MarianTokenizer
 import gc
 import torch 
   
@@ -106,10 +107,22 @@ else: #model = gpt
 # model inference
 
 # In[7]:
+def translate_to_english(prompt):
+    device = torch.device('cpu')  # Use CPU for translation
+    model_name = 'Helsinki-NLP/opus-mt-ko-en'
+    tokenizer = MarianTokenizer.from_pretrained(model_name)
+    model = MarianMTModel.from_pretrained(model_name).to(device)
 
+    inputs = tokenizer(prompt, return_tensors='pt').to(device)
+    translated = model.generate(**inputs, max_new_tokens=512) 
+    translated_prompt = tokenizer.decode(translated[0], skip_special_tokens=True)
+    return translated_prompt
+
+user_prompt = input("사용자의 프롬프트를 입력하세요: ")
+english_prompt = translate_to_english(user_prompt)
 
 #test_input_text = 'kjkjkjkj'
-test_input_text = "Hello, please draw an illustration. Um... and... a pink-haired girl wearing a hoodie with cat ears, around the age of 16, in the style of Japanese animation. Please."
+test_input_text = english_prompt
 test_output_length = 16 #token length 자유롭게 지정
 
 
