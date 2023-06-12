@@ -3,10 +3,11 @@ import requests
 from PIL import Image
 from transformers import BlipProcessor, BlipForConditionalGeneration
 import transformers
-import cv2
 import torch
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+print(transformers.__version__)
 
 def Image_captioning(image):
 
@@ -19,8 +20,10 @@ def Image_captioning(image):
 
     return processor.decode(out[0], skip_special_tokens=True)
 
-#raw_image = Image.open('./redcar.jpg')
+raw_image = Image.open('D:/LG_data/source00024.jpg')
 
-#caption = Image_captioning(raw_image)
+caption = Image_captioning(raw_image)
 
+print(caption)
 
+# %%

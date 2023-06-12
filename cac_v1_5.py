@@ -1,3 +1,4 @@
+#%%
 from typing import Optional, Union, Tuple, List, Callable, Dict
 import torch
 from diffusers import StableDiffusionPipeline
@@ -6,9 +7,28 @@ import numpy as np
 import abc
 import ptp_utils
 import seq_aligner
-import diffusers
-import transformers
+import torch
+from diffusers import AltDiffusionPipeline, EulerDiscreteScheduler
 
+#device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+#pipe = AltDiffusionPipeline.from_pretrained("BAAI/AltDiffusion-m9", torch_dtype=torch.float16).to(device)
+#pipe.scheduler = EulerDiscreteScheduler.from_config(pipe.scheduler.config)
+
+#euler_scheduler = EulerDiscreteScheduler.from_pretrained("BAAI/AltDiffusion-m9", subfolder="scheduler")
+
+#pipe = AltDiffusionPipeline.from_pretrained("BAAI/AltDiffusion-m9", scheduler=euler_scheduler).to(device)
+
+#prompt = "가을 단풍이 물들어가는 산길을 걷는 상황"
+#image = pipe(prompt).images[0]
+
+#image.save('altt.png')
+import diffusers
+print(diffusers.__version__)
+
+
+import transformers
+print(transformers.__version__)
 
 MY_TOKEN = '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'
 LOW_RESOURCE = False 
@@ -16,7 +36,8 @@ NUM_DIFFUSION_STEPS = 50
 GUIDANCE_SCALE = 7.5
 MAX_NUM_WORDS = 77
 device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
-ldm_stable = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", use_auth_token=MY_TOKEN).to(device)
+#ldm_stable = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", use_auth_token=MY_TOKEN,revision="249dd2d739844dea6a0bc7fc27b3c1d014720b28").to(device)
+ldm_stable = AltDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5").to(device)
 tokenizer = ldm_stable.tokenizer
 
 class LocalBlend:
@@ -228,7 +249,7 @@ def get_equalizer(text: str, word_select: Union[int, Tuple[int, ...]], values: U
 
 from PIL import Image
 
-def aggregate_attention(attention_store: AttentionStore, res: int, from_where: List[str], is_cross: bool, select: int):
+def aggregate_attention(prompts,attention_store: AttentionStore, res: int, from_where: List[str], is_cross: bool, select: int):
     out = []
     attention_maps = attention_store.get_average_attention()
     num_pixels = res ** 2
@@ -242,10 +263,10 @@ def aggregate_attention(attention_store: AttentionStore, res: int, from_where: L
     return out.cpu()
 
 
-def show_cross_attention(attention_store: AttentionStore, res: int, from_where: List[str], select: int = 0):
+def show_cross_attention(prompts,attention_store: AttentionStore, res: int, from_where: List[str], select: int = 0):
     tokens = tokenizer.encode(prompts[select])
     decoder = tokenizer.decode
-    attention_maps = aggregate_attention(attention_store, res, from_where, True, select)
+    attention_maps = aggregate_attention(prompts,attention_store, res, from_where, True, select)
     images = []
     for i in range(len(tokens)):
         image = attention_maps[:, :, i]
@@ -255,7 +276,7 @@ def show_cross_attention(attention_store: AttentionStore, res: int, from_where: 
         image = np.array(Image.fromarray(image).resize((256, 256)))
         image = ptp_utils.text_under_image(image, decoder(int(tokens[i])))
         images.append(image)
-    ptp_utils.view_images(np.stack(images, axis=0))
+    ptp_utils.view_images(np.stack(images, axis=0)).save('attention_map.jpg','JPEG')
     
 
 def show_self_attention_comp(attention_store: AttentionStore, res: int, from_where: List[str],
@@ -271,7 +292,9 @@ def show_self_attention_comp(attention_store: AttentionStore, res: int, from_whe
         image = Image.fromarray(image).resize((256, 256))
         image = np.array(image)
         images.append(image)
+    
     ptp_utils.view_images(np.concatenate(images, axis=1))
+    
 
 def run_and_display(prompts, controller, latent=None, run_baseline=False, generator=None):
     if run_baseline:
@@ -279,20 +302,23 @@ def run_and_display(prompts, controller, latent=None, run_baseline=False, genera
         images, latent = run_and_display(prompts, EmptyControl(), latent=latent, run_baseline=False, generator=generator)
         print("with prompt-to-prompt")
     images, x_t = ptp_utils.text2image_ldm_stable(ldm_stable, prompts, controller, latent=latent, num_inference_steps=NUM_DIFFUSION_STEPS, guidance_scale=GUIDANCE_SCALE, generator=generator, low_resource=LOW_RESOURCE)
-    ptp_utils.view_images(images)
+    
+    ptp_utils.view_images(images).save('compare.jpg','JPEG')
+    
     return images, x_t
-
-g_cpu = torch.Generator().manual_seed(8888)
-prompts = ["A mountainous area experiencing a flood"]
-controller = AttentionStore()
-image, x_t = run_and_display(prompts, controller, latent=None, run_baseline=False, generator=g_cpu)
-show_cross_attention(controller, res=16, from_where=("up", "down"))
 #%%
-prompts = ["A mountainous area experiencing a wildfire",
-           "A mountainous area experiencing a flood"]
+#g_cpu = torch.Generator().manual_seed(8888)
+#g_cpu = torch.Generator().manual_seed(69)
+#prompts = ['night sky, with stars, background, black rabbit, making a wish, looking, full moon']
+#prompts = ['Long time no see. I have had a good idea. The background is a night sky with stars. Oh... whats it called? Oh right. Could you please draw a black rabbit making a wish while looking at a full moon? Thank you.']
+#prompts = ["A yellow color luxury sports car speeding down a highway"]
+#controller = AttentionStore()
+#image, x_t = run_and_display(prompts, controller, latent=None, run_baseline=False, generator=g_cpu)
+#show_cross_attention(controller, res=16, from_where=("up", "down"))
+#Wprompts = ["A luxury sports car speeding down a highway", "A yello luxury sports car speeding down a highway"]
 
-controller = AttentionReplace(prompts, NUM_DIFFUSION_STEPS, cross_replace_steps=.8, self_replace_steps=0.4)
-_ = run_and_display(prompts, controller, latent=x_t, run_baseline=True)
+#controller = AttentionReplace(prompts, NUM_DIFFUSION_STEPS, cross_replace_steps=.8, self_replace_steps=0.4)
+#_ = run_and_display(prompts, controller, latent=x_t, run_baseline=True)
 # #%%
 # prompts = ["A painting of a squirrel eating a burger",
 #            "A painting of a lion eating a burger"]
@@ -307,4 +333,39 @@ _ = run_and_display(prompts, controller, latent=x_t, run_baseline=True)
 #                               cross_replace_steps={"default_": 1., "lion": .4},
 #                               self_replace_steps=0.4, local_blend=lb)
 # _ = run_and_display(prompts, controller, latent=x_t, run_baseline=False)
-# %%
+
+
+#prompts = ["A yellow color luxury sports car speeding down a highway", "A red color truck speeding down a highway"]
+#controller = AttentionRefine(prompts, NUM_DIFFUSION_STEPS, cross_replace_steps=.8, self_replace_steps=.2)
+#_ = run_and_display(prompts, controller, latent=x_t, run_baseline=True)
+
+#===========================
+#prompts = ['night sky, with stars, background, black rabbit, making a wish, looking, full moon','day sky, with stars, background, tiger, making a wish, looking, full moon']
+
+
+#lb = LocalBlend(prompts, (("night sky","with stars","background","black rabbit","making a wish","looking","full moon"), ("day sky","with stars","background","tiger","making a wish","looking","full moon")))
+#controller = AttentionRefine(prompts, NUM_DIFFUSION_STEPS, cross_replace_steps=.8, self_replace_steps=.4, local_blend=lb)
+#_ = run_and_display(prompts, controller, latent=x_t, run_baseline=False)
+
+
+
+#controller_a = AttentionRefine(prompts, NUM_DIFFUSION_STEPS, cross_replace_steps=.8, self_replace_steps=.4, local_blend=lb)
+
+
+#equalizer = get_equalizer(prompts[1], ("tiger"), (10,))
+#ontroller = AttentionReweight(prompts, NUM_DIFFUSION_STEPS, cross_replace_steps=.8, self_replace_steps=.4, equalizer=equalizer, local_blend=lb, controller=controller_a)
+#_ = run_and_display(prompts, controller, latent=x_t, run_baseline=False)
+#prompts = ["cake",
+#           "birthday cake"] 
+
+#lb = LocalBlend(prompts, ("cake", ("birthday", "cake")))
+#controller = AttentionRefine(prompts, NUM_DIFFUSION_STEPS, cross_replace_steps=.8, self_replace_steps=.4, local_blend=lb)
+#_ = run_and_display(prompts, controller, latent=x_t, run_baseline=False)
+
+#lb = LocalBlend(prompts, ("cake", ("birthday", "cake")))
+#controller_a = AttentionRefine(prompts, NUM_DIFFUSION_STEPS, cross_replace_steps=.8, self_replace_steps=.4, local_blend=lb)
+
+## pay 5 times more attention to the word "birthday"
+#equalizer = get_equalizer(prompts[1], ("birthday"), (10,))
+#controller = AttentionReweight(prompts, NUM_DIFFUSION_STEPS, cross_replace_steps=.8, self_replace_steps=.4, equalizer=equalizer, local_blend=lb, controller=controller_a)
+#_ = run_and_display(prompts, controller, latent=x_t, run_baseline=False)
